@@ -1,0 +1,173 @@
+services:
+  app:
+    # Build the production PHP-FPM, Nginx, and Vite image from this repository.
+    build:
+      context: .
+      target: app
+    # Restart the web application after host or Docker restarts.
+    restart: unless-stopped
+    # Load Laravel settings and credentials from the ignored local .env file.
+    env_file:
+      - .env
+    # Override development values with production settings and the Compose database.
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: ${DOCKER_APP_URL:-http://localhost:8080}
+      TRUSTED_PROXIES: "*"
+      LOG_CHANNEL: stderr
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: ${DB_DATABASE:-proxyservice}
+      DB_USERNAME: ${DB_USERNAME:-proxyservice}
+      DB_PASSWORD: ${DB_PASSWORD:?Définis un mot de passe DB_PASSWORD fort dans .env}
+      DB_ROOT_PASSWORD: ""
+      SESSION_DRIVER: database
+      CACHE_STORE: database
+      QUEUE_CONNECTION: database
+      FILESYSTEM_DISK: local
+      RUN_APP_INIT: "true"
+    # Publish HTTP only on loopback; cloudflared on the host reaches this port.
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:80"
+    # Persist user uploads independently from the replaceable container image.
+    volumes:
+      - app-storage:/var/www/html/storage/app
+    # Wait until MySQL accepts connections before starting migrations.
+    depends_on:
+      db:
+        condition: service_healthy
+    # Check that Laravel responds before declaring the service healthy.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--header",
+          "X-Forwarded-Proto: https",
+          "http://127.0.0.1/up",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  db:
+    # Use MySQL 8.4 LTS for Laravel's configured MySQL connection.
+    image: mysql:8.4
+    # Keep the database running across process and host restarts.
+    restart: unless-stopped
+    # Initialize the database and application account from the .env values.
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-proxyservice}
+      MYSQL_USER: ${DB_USERNAME:-proxyservice}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Définis un mot de passe DB_PASSWORD fort dans .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Définis un mot de passe DB_ROOT_PASSWORD fort dans .env}
+    # Store MySQL's data files in a named persistent volume.
+    volumes:
+      - mysql-data:/var/lib/mysql
+    # Report healthy only after MySQL responds to authenticated local checks.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping --host=127.0.0.1 --user=root --password=$$MYSQL_ROOT_PASSWORD --silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  worker:
+    # Reuse the application image for the asynchronous Laravel queue worker.
+    build:
+      context: .
+      target: app
+    # Restart the worker when it exits unexpectedly.
+    restart: unless-stopped
+    # Load application credentials without passing the database root secret.
+    env_file:
+      - .env
+    # Match the web service's production DB and queue configuration.
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: ${DOCKER_APP_URL:-http://localhost:8080}
+      TRUSTED_PROXIES: "*"
+      LOG_CHANNEL: stderr
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: ${DB_DATABASE:-proxyservice}
+      DB_USERNAME: ${DB_USERNAME:-proxyservice}
+      DB_PASSWORD: ${DB_PASSWORD:?Définis un mot de passe DB_PASSWORD fort dans .env}
+      DB_ROOT_PASSWORD: ""
+      SESSION_DRIVER: database
+      CACHE_STORE: database
+      QUEUE_CONNECTION: database
+      FILESYSTEM_DISK: local
+      RUN_APP_INIT: "false"
+    # Share uploaded files with the web container.
+    volumes:
+      - app-storage:/var/www/html/storage/app
+    # Start consuming jobs only after the web app has completed its migrations.
+    depends_on:
+      app:
+        condition: service_healthy
+    # Run one worker; increase replicas only after checking job idempotency.
+    command:
+      [
+        "php",
+        "artisan",
+        "queue:work",
+        "--sleep=3",
+        "--tries=3",
+        "--timeout=60",
+      ]
+
+  scheduler:
+    # Reuse the application image for Laravel's continuously running scheduler.
+    build:
+      context: .
+      target: app
+    # Restart the scheduler after host or Docker restarts.
+    restart: unless-stopped
+    # Load the same Laravel secrets used by the web and worker services.
+    env_file:
+      - .env
+    # Configure the scheduler to use the internal MySQL database.
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: ${DOCKER_APP_URL:-http://localhost:8080}
+      TRUSTED_PROXIES: "*"
+      LOG_CHANNEL: stderr
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: ${DB_DATABASE:-proxyservice}
+      DB_USERNAME: ${DB_USERNAME:-proxyservice}
+      DB_PASSWORD: ${DB_PASSWORD:?Définis un mot de passe DB_PASSWORD fort dans .env}
+      DB_ROOT_PASSWORD: ""
+      SESSION_DRIVER: database
+      CACHE_STORE: database
+      QUEUE_CONNECTION: database
+      FILESYSTEM_DISK: local
+      RUN_APP_INIT: "false"
+    # Share local uploads if scheduled tasks create or process files.
+    volumes:
+      - app-storage:/var/www/html/storage/app
+    # Start schedule:work only after the app has initialized the database.
+    depends_on:
+      app:
+        condition: service_healthy
+    # Keep Laravel's minute-by-minute schedule loop alive.
+    command: ["php", "artisan", "schedule:work"]
+
+# Keep database and application uploads after containers are replaced.
+volumes:
+  mysql-data:
+  app-storage:

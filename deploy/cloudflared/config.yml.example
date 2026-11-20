@@ -1,0 +1,12 @@
+# Replace this value with the UUID printed by `cloudflared tunnel create`.
+tunnel: <TUNNEL-UUID>
+
+# Keep the tunnel credentials outside the Git repository and readable only by cloudflared.
+credentials-file: /etc/cloudflared/<TUNNEL-UUID>.json
+
+# Route the public hostname to the app's loopback-only Docker port.
+ingress:
+  - hostname: app.example.com
+    service: http://127.0.0.1:8080
+  # Return 404 for every hostname not explicitly routed above.
+  - service: http_status:404
