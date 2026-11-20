@@ -1,5 +1,4 @@
 import { Form, Head } from '@inertiajs/react';
-import SmsLoginController from '@/actions/App/Http/Controllers/Auth/SmsLoginController';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
@@ -7,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { login } from '@/routes';
+import sms from '@/routes/login/sms';
 
 type Props = {
     phone: string | null;
@@ -28,7 +28,7 @@ export default function SmsLogin({ phone, codeSent, status }: Props) {
             )}
             <div className="grid gap-6">
                 <Form
-                    {...SmsLoginController.send.form()}
+                    {...sms.send.form()}
                     className="grid gap-3"
                 >
                     {({ errors, processing }) => (
@@ -63,7 +63,7 @@ export default function SmsLogin({ phone, codeSent, status }: Props) {
 
                 {codeSent && (
                     <Form
-                        {...SmsLoginController.verify.form()}
+                        {...sms.verify.form()}
                         className="grid gap-3"
                     >
                         {({ errors, processing }) => (
