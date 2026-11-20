@@ -1,0 +1,39 @@
+# Exclude Git metadata and local editor state from the image build context.
+.git
+.codex
+.agents
+.claude
+.cursor
+.vscode
+.idea
+.phpactor.json
+
+# Exclude all local environment files except the non-secret template.
+.env
+.env.*
+!.env.example
+
+# Exclude local dependency trees and generated frontend output.
+node_modules
+vendor
+public/build
+public/hot
+public/storage
+
+# Exclude uploaded files, logs, caches, and test/build artifacts.
+storage/app
+storage/logs/*
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+database/*.sqlite
+database/*.sqlite-*
+tests
+phpunit.xml
+.phpunit.cache
+.phpunit.result.cache
+
+# Exclude repository documentation and temporary logs from the runtime image.
+README.md
+MISSION.md
+*.log

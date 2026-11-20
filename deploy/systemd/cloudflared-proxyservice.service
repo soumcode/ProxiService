@@ -1,0 +1,29 @@
+[Unit]
+# Start after networking and Docker, which hosts the loopback-bound Laravel app.
+Description=Cloudflare Tunnel for ProxyService
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+# Run the connector as the dedicated account configured in the deployment steps.
+User=cloudflared
+Group=cloudflared
+Type=simple
+
+# Use the local tunnel configuration stored outside the repository.
+ExecStart=/usr/bin/cloudflared tunnel --config /etc/cloudflared/config.yml run proxyservice
+
+# Restart automatically after temporary network or tunnel failures.
+Restart=on-failure
+RestartSec=5s
+
+# Apply basic systemd hardening without restricting tunnel networking.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+# Start the tunnel automatically when the Arch Linux host boots.
+WantedBy=multi-user.target
